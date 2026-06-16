@@ -1,0 +1,87 @@
+import requests
+import base64
+import csv
+import urllib3
+
+# Ignore SSL warning (remove if your certificate is trusted)
+urllib3.disable_warnings()
+
+# =========================
+# Configuration
+# =========================
+ADO_URL = "https://ado.global.standardchartered.com/sc-ado-op"
+PAT = "YOUR_PAT_TOKEN"
+GROUP_NAME = "All ADO Users"
+
+# Authentication
+token = base64.b64encode(f":{PAT}".encode()).decode()
+
+headers = {
+    "Authorization": f"Basic {token}",
+    "Content-Type": "application/json"
+}
+
+# =========================
+# Step 1 - Get all users
+# =========================
+users_url = f"{ADO_URL}/_apis/identities?searchFilter=General&filterValue={GROUP_NAME}&queryMembership=None&api-version=7.1-preview.1"
+
+response = requests.get(users_url, headers=headers, verify=False)
+response.raise_for_status()
+
+groups = response.json().get("value", [])
+
+if not groups:
+    print("All ADO Users group not found")
+    exit()
+
+group = groups[0]
+group_id = group["id"]
+
+print(f"Found group: {group['displayName']}")
+print(f"Group ID: {group_id}")
+
+# =========================
+# Step 2 - Get group members
+# =========================
+
+members_url = (
+    f"{ADO_URL}/_apis/identities"
+    f"?searchFilter=Membership"
+    f"&filterValue={group_id}"
+    f"&queryMembership=Direct"
+    f"&api-version=7.1-preview.1"
+)
+
+response = requests.get(members_url, headers=headers, verify=False)
+response.raise_for_status()
+
+members = response.json().get("value", [])
+
+print(f"Total members found: {len(members)}")
+
+# =========================
+# Step 3 - Export CSV
+# =========================
+
+csv_file = "All_ADO_Users.csv"
+
+with open(csv_file, "w", newline="", encoding="utf-8") as file:
+    writer = csv.writer(file)
+
+    writer.writerow([
+        "Display Name",
+        "Account Name",
+        "Unique Name",
+        "Descriptor"
+    ])
+
+    for user in members:
+        writer.writerow([
+            user.get("displayName", ""),
+            user.get("providerDisplayName", ""),
+            user.get("uniqueName", ""),
+            user.get("descriptor", "")
+        ])
+
+print(f"Export completed: {csv_file}")
